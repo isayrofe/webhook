@@ -5,11 +5,39 @@ const axios = require('axios'); // Para enviar respuestas a Chatwoot
 const app = express();
 const PORT = 3000;
 
+const {
+  GoogleGenerativeAI,
+  HarmCategory,
+  HarmBlockThreshold,
+} = require("@google/generative-ai");
+
+const apiKey = "AIzaSyAFAOG_zovFcenLwuSQWH179YBN9cFyQQI";
+const genAI = new GoogleGenerativeAI(apiKey);
+
+const model = genAI.getGenerativeModel({
+  model: "gemini-1.5-flash",
+});
+
+const generationConfig = {
+  temperature: 1,
+  topP: 0.95,
+  topK: 40,
+  maxOutputTokens: 8192,
+  responseMimeType: "text/plain",
+};
+
 // Middleware para procesar JSON
 app.use(bodyParser.json());
 
 // Ruta para recibir eventos de Chatwoot
 app.post('/webhook', async (req, res) => {
+  const chatSession = model.startChat({
+    generationConfig,
+    history: [
+    ],
+  });
+
+
   const event = req.body;
 
   if (!event) {
@@ -19,24 +47,29 @@ app.post('/webhook', async (req, res) => {
   console.log('Evento recibido:', event);
 
   if (event.event === 'message_created') {
-    const { conversation, message } = event.payload;
-
+    const { content, account, conversation, message_type } = event;
+    console.log('Cuenta:', account);
+    console.log('Conversación:', conversation);
+    console.log('Tipo de mensaje:', message_type);
     // Comprueba si el mensaje es entrante
-    if (message.message_type === 'incoming') {
+    if (message_type === 'incoming') {
+
+      const result = await chatSession.sendMessage(content);
       // Responder al mensaje usando la API de Chatwoot
       const responseMessage = {
-        content: '¡Hola! Soy un bot automático. ¿En qué puedo ayudarte?',
+        content: result.response.text(),
         message_type: 'outgoing',
       };
-
+      console.log('Enviando respuesta...');
+      console.log(`https://app.chatwoot.com/api/v1/accounts/${account.id}/conversations/${conversation.id}/messages`);
       try {
         await axios.post(
-          `https://app.chatwoot.com/app/accounts/107322/api/v1/accounts/${conversation.account_id}/conversations/${conversation.id}/messages`,
+          `https://app.chatwoot.com/api/v1/accounts/${account.id}/conversations/${conversation.id}/messages`,
           responseMessage,
           {
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `Bearer 6XUX86BXErNrCvzSCaXfsDfM`,
+              'api_access_token': `6XUX86BXErNrCvzSCaXfsDfM`,
             },
           }
         );
